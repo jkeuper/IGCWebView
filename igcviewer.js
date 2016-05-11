@@ -3,32 +3,33 @@
 var ns = (function($) {
   'use strict';
   var igcFile = null;
-  var igcFiles = [];
   var barogramPlot = null;
   var altitudeConversionFactor = 3.2808399; // Conversion from metres to required units
   var timezone = {
-    zonename: "Europe/Amsterdam",
-    zoneabbr: "CEST",
-    offset: 7200*1000,
-    dst: true
+    zonename: "Europe/London",
+    zoneabbr: "UTC",
+    offset: 0,
+    dst: false
   };
   var task = null;
   var sectordefs = {};
   var mapControl;
 
 
-  function loadAirspace(igcFile) {
+  function loadAirspace() {
     $.post("getairspace.php",
       {
         lat: igcFile.latLong[0][0],
         lng: igcFile.latLong[0][1]
       },
-      function(data) {
-        mapControl.setAirspace(data);
-      }, "json")
-      .fail(function() {
-          //alert("Airspace load failed");
-      });
+      function(data, status) {
+        if (status === 'success') {
+          mapControl.setAirspace(data);
+        }
+        else {
+          alert("Airspace load failed");
+        }
+      }, "json");
   }
 
   function showSectors() {
@@ -622,8 +623,8 @@ var ns = (function($) {
         //Local date may not be the same as UTC date
         var localdate = new Date(flightdate.getTime() + timezone.offset);
         $('#datecell').text(displaydate(localdate));
-        //barogramPlot = plotBarogram(igcFile);
-        //updateTimeline(0, mapControl);
+        barogramPlot = plotBarogram(igcFile);
+        updateTimeline(0, mapControl);
       }
     });
   }
@@ -632,37 +633,24 @@ var ns = (function($) {
     return (n < 10) ? ("0" + n.toString()) : n.toString();
   }
 
-  function plotBarogram(igcFiles) {
-    var totalData = [];
-    var k;
-    var igcFile;
-    for (k = 0; k < igcFiles.length; k++) {
-      igcFile = igcFiles[k];
-      
-      var nPoints = igcFile.recordTime.length;
-      var pressureBarogramData = [];
-      var gpsBarogramData = [];
-      var j;
-      var timestamp;
-      for (j = 0; j < nPoints; j++) {
-        timestamp = igcFile.recordTime[j].getTime() + timezone.offset;
-        pressureBarogramData.push([timestamp, igcFile.pressureAltitude[j] * altitudeConversionFactor]);
-        gpsBarogramData.push([timestamp, igcFile.gpsAltitude[j] * altitudeConversionFactor]);
-      }
-      
-      totalData.push({label: 'GPS altitude: ' + igcFile.headersIndex.CID, data: gpsBarogramData})
-      //totalData.push({label: 'Pressure altitude: ' + igcFile.headersIndex.CID, data: pressureBarogramData})
+  function plotBarogram() {
+    var nPoints = igcFile.recordTime.length;
+    var pressureBarogramData = [];
+    var gpsBarogramData = [];
+    var j;
+    var timestamp;
+    for (j = 0; j < nPoints; j++) {
+      timestamp = igcFile.recordTime[j].getTime() + timezone.offset;
+      pressureBarogramData.push([timestamp, igcFile.pressureAltitude[j] * altitudeConversionFactor]);
+      gpsBarogramData.push([timestamp, igcFile.gpsAltitude[j] * altitudeConversionFactor]);
     }
-    
-    var baro = $.plot($('#barogram'), totalData,
-    //[{
-    //  label: 'Pressure altitude',
-    //  data: pressureBarogramData
-    //}, {
-    //  label: 'GPS altitude',
-    //  data: gpsBarogramData
-    //}], 
-      {
+    var baro = $.plot($('#barogram'), [{
+      label: 'Pressure altitude',
+      data: pressureBarogramData
+    }, {
+      label: 'GPS altitude',
+      data: gpsBarogramData
+    }], {
       axisLabels: {
         show: true
       },
@@ -682,49 +670,27 @@ var ns = (function($) {
       grid: {
         clickable: true,
         autoHighlight: false
-      },
-      colors: [
-        '#00659F',
-        '#A23336',
-        '#718224',
-        '#593869',
-        '#2F2F2F',
-        '#F69730',
-        '#FFCB92',
-        '#70AD25', 
-        '#37A7DA',
-        '#D63E2A',
-        '#CF51B6',
-        '#565656',
-        '#FF8DE9', 
-        '#0065A0',
-        '#88DAFF',
-        '#FF8E7F',
-        '#B8F471',
-        '#A3A3A3',
-        '#FBFBFB' 
-      ]
+      }
     });
     return baro;
   }
 
-  function updateTimeline(time, mapControl) {
-    //var currentPosition = igcFile.latLong[timeIndex];
-    //var positionText = pointDescription(L.latLng(currentPosition));
+  function updateTimeline(timeIndex, mapControl) {
+    var currentPosition = igcFile.latLong[timeIndex];
+    var positionText = pointDescription(L.latLng(currentPosition));
     var unitName = $('#altitudeUnits').val();
     //add in offset from UTC then convert back to UTC to get correct time in timezone!
-    var adjustedTime = new Date(time + timezone.offset);
-    /*
+    var adjustedTime = new Date(igcFile.recordTime[timeIndex].getTime() + timezone.offset);
     $('#timePositionDisplay').html(adjustedTime.getUTCHours() + ':' + pad(adjustedTime.getUTCMinutes()) + ':' + pad(adjustedTime.getSeconds()) + " " + timezone.zoneabbr + '; ' +
       (igcFile.pressureAltitude[timeIndex] * altitudeConversionFactor).toFixed(0) + ' ' +
       unitName + ' (barometric) / ' +
       (igcFile.gpsAltitude[timeIndex] * altitudeConversionFactor).toFixed(0) + ' ' +
-      unitName + ' (GPS); ' + positionText);*/
-    mapControl.setTimeMarker(time);
+      unitName + ' (GPS); ' + positionText);
+    mapControl.setTimeMarker(timeIndex);
 
     barogramPlot.lockCrosshair({
       x: adjustedTime.getTime(),
-      y: 0//igcFile.pressureAltitude[timeIndex] * altitudeConversionFactor
+      y: igcFile.pressureAltitude[timeIndex] * altitudeConversionFactor
     });
   }
 
@@ -777,8 +743,8 @@ var ns = (function($) {
     showTask(mapControl);
     $('#clearTask').show();
   }
-  
-  function displayTask(igcFile, mapControl) {
+
+  function displayIgc(mapControl) {
     if ($("input[name=tasksource][value=infile]").prop('checked')) {
       clearTask(mapControl);
       task = getFileTask(igcFile);
@@ -787,9 +753,6 @@ var ns = (function($) {
     if (task !== null) {
       showTask(mapControl);
     }
-  }
-
-  function displayInfo(igcFile) {
     // Display the headers.
     var headerBlock = $('#headers');
     headerBlock.html('');
@@ -802,35 +765,18 @@ var ns = (function($) {
       );
     }
     $('#flightInfo').show();
-  }
-  
-  
-  function displayIgc(igcFile, mapControl) {
     // Reveal the map and graph. We have to do this before
     // setting the zoom level of the map or plotting the graph.
     $('#igcFileDisplay').show();
-    mapControl.addTrack(igcFile.latLong, igcFile.recordTime, igcFile.headersIndex.CID);
-
-    //loadAirspace(igcFile);
+    mapControl.addTrack(igcFile.latLong);
+    loadAirspace();
     //Barogram is now plotted on "complete" event of timezone query
-    //gettimezone(igcFile, mapControl);
+    gettimezone(igcFile, mapControl);
     // Set airspace clip altitude to selected value and show airspace for the current window
     //mapControl.updateAirspace(Number($("#airclip").val()));
     //Enable automatic update of the airspace layer as map moves or zooms
     //mapControl.activateEvents();
-  }
-  
-  function setTimeSlider(igcFiles) {
-    var minTime = igcFiles[0].recordTime[0].getTime();
-    var maxTime = igcFiles[0].recordTime[igcFiles[0].recordTime.length-1].getTime();
-    var j;
-    for (j = 1; j < igcFiles.length; j++) {
-      minTime = Math.min(minTime, igcFiles[j].recordTime[0].getTime());
-      maxTime = Math.max(maxTime, igcFiles[j].recordTime[igcFiles[j].recordTime.length-1].getTime());
-    }
-    $('#timeSlider').prop('min', minTime);
-    $('#timeSlider').prop('max', maxTime);
-    $('#timeSlider').val(minTime);
+    $('#timeSlider').prop('max', igcFile.recordTime.length - 1);
   }
 
   function storePreference(name, value) {
@@ -857,46 +803,24 @@ var ns = (function($) {
     setSectorDefaults();
     $("input[name=tasksource][value=infile]").prop('checked', true);
     $('#fileControl').change(function() {
-      igcFiles = [];
       if (this.files.length > 0) {
-        $('#errorMessage').text('');
-        mapControl.reset();
-        $('#timeSlider').prop('min', 0);
-        $('#timeSlider').prop('max', 100);
-        $('#timeSlider').val(0);
-        $('#analyse').hide();
-        
-        var iFile = 0;
         var reader = new FileReader();
-        var files = this.files;
         reader.onload = function(e) {
           try {
-            var newIgcFile = parseIGC(this.result);
-            displayIgc(newIgcFile, mapControl);
-            igcFiles.push(newIgcFile);
-            iFile++;
-            if (task == null) {
-              displayTask(newIgcFile, mapControl);
-            }
-            if (files.length > iFile) {
-              reader.readAsText(files[iFile]);
-            } else {
-              if (files.length == 1) {
-                displayInfo(newIgcFile);
-                $('#analyse').show();
-              }
-              barogramPlot = plotBarogram(igcFiles);
-              setTimeSlider(igcFiles);
-            }
+            $('#errorMessage').text('');
+            mapControl.reset();
+            $('#timeSlider').val(0);
+            igcFile = parseIGC(this.result);
+            displayIgc(mapControl);
           } catch (ex) {
             if (ex instanceof IGCException) {
-              $('#errorMessage').append(ex.message);
+              $('#errorMessage').text(ex.message);
             } else {
               throw ex;
             }
           }
         };
-        reader.readAsText(this.files[iFile]);
+        reader.readAsText(this.files[0]);
       }
     });
 
@@ -915,8 +839,8 @@ var ns = (function($) {
       } else {
         altitudeConversionFactor = 1.0;
       }
-      if (igcFiles !== null) {
-        barogramPlot = plotBarogram(igcFiles);
+      if (igcFile !== null) {
+        barogramPlot = plotBarogram();
         updateTimeline($('#timeSlider').val(), mapControl);
       }
 
@@ -975,8 +899,8 @@ var ns = (function($) {
 
     $('#barogram').on('plotclick', function(event, pos, item) {
       if (item) {
-        updateTimeline(item.datapoint[0] - timezone.offset, mapControl);
-        $('#timeSlider').val(item.datapoint[0]);
+        updateTimeline(item.dataIndex, mapControl);
+        $('#timeSlider').val(item.dataIndex);
       }
     });
 
