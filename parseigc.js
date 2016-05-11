@@ -91,13 +91,15 @@ function parseIGC(igcFile) {
             'CCL': 'Competition class'
         };
 
-        var headerName = headerSubtypes[headerRecord.substring(2, 5)];
+        var headerCode = headerRecord.substring(2, 5);
+        var headerName = headerSubtypes[headerCode];
         if (headerName !== undefined) {
             var colonIndex = headerRecord.indexOf(':');
             if (colonIndex !== -1) {
                 var headerValue = headerRecord.substring(colonIndex + 1);
                 if (headerValue.length > 0 && /([^\s]+)/.test(headerValue)) {
                     return {
+                        code: headerCode,
                         name: headerName,
                         value: headerValue
                     };
@@ -171,6 +173,7 @@ function parseIGC(igcFile) {
     // values.
     var model = {
         headers: [],
+        headersIndex: [],
         recordTime: [],
         latLong: [],
         pressureAltitude: [],
@@ -228,6 +231,7 @@ function parseIGC(igcFile) {
                 headerData = parseHeader(currentLine);
                 if (headerData) {
                     model.headers.push(headerData);
+                    model.headersIndex[headerData.code] = headerData.value;
                 }
                 break;
         }
