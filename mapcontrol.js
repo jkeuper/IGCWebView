@@ -130,29 +130,51 @@ function createMapControl(elementName) {
 
   mapLayers.openStreetMap.addTo(map);
   layersControl.addTo(map);
+  var data = [];
   var trackLatLong = [];
+  var trackColors = [
+      [ 'darkblue',   '#00659F' ],
+      [ 'darkred',    '#A23336' ],
+      [ 'darkgreen',  '#718224' ],
+      [ 'darkpurple', '#593869' ],
+      [ 'black',      '#2F2F2F' ],
+      [ 'orange',     '#F69730' ],
+      [ 'beige',      '#FFCB92' ],
+      [ 'green',      '#70AD25' ],
+      [ 'blue',       '#37A7DA' ],
+      [ 'red',        '#D63E2A' ],
+      [ 'purple',     '#CF51B6' ],
+      [ 'gray',       '#565656' ],
+      [ 'pink',       '#FF8DE9' ],
+      [ 'cadetblue',  '#0065A0' ],
+      [ 'lightblue',  '#88DAFF' ],
+      [ 'lightred',   '#FF8E7F' ],
+      [ 'lightgreen', '#B8F471' ],
+      [ 'lightgray',  '#A3A3A3' ],
+      [ 'white',      '#FBFBFB' ]
+    ];
+  var iTrackColor = 0;
   var timePositionMarker;
   L.AwesomeMarkers.Icon.prototype.options.prefix = 'fa';
-  var planeIcon = L.AwesomeMarkers.icon({
-    icon: 'plane',
-    iconColor: 'white',
-    markerColor: 'red'
-  });
+  var planeIcon;
+  
   return {
     reset: function() {
       // Clear any existing track data so that a new file can be loaded.
-      if (mapLayers.track) {
-        map.removeLayer(mapLayers.track);
-        layersControl.removeLayer(mapLayers.track);
-      }
-
       if (mapLayers.task) {
         map.removeLayer(mapLayers.task);
         layersControl.removeLayer(mapLayers.task);
       }
-      if (pin) {
-        map.removeLayer(pin);
+
+      var i;
+      for (i = 0; i < data.length; i++) {
+        map.removeLayer(data[i].timePositionMarker);
+        map.removeLayer(data[i].track);
+        layersControl.removeLayer(data[i].track);
       }
+      
+      data = [];
+      iTrackColor = 0;
     },
 
     setAirspace: function(suadata) {
@@ -160,22 +182,29 @@ function createMapControl(elementName) {
       showAirspace();
     },
 
-    addTrack: function(latLong) {
-      trackLatLong = latLong;
+    addTrack: function(latLong, recordTime, name) {
       var trackLine = L.polyline(latLong, {
-        color: 'blue',
+        color: trackColors[iTrackColor][1],
         weight: 4
       });
+      planeIcon = L.AwesomeMarkers.icon({
+        icon: 'plane',
+        iconColor: 'white',
+        markerColor: trackColors[iTrackColor][0]
+      });
+      iTrackColor++;
       timePositionMarker = L.marker(latLong[0], {
         icon: planeIcon
       });
-      mapLayers.track = L.layerGroup([
+      var track = L.layerGroup([
         trackLine,
         timePositionMarker
       ]).addTo(map);
-      layersControl.addOverlay(mapLayers.track, 'Flight path');
+      layersControl.addOverlay(track, 'Flight path: ' + name);
       initBounds = (trackLine.getBounds());
       map.fitBounds(initBounds);
+      
+      data.push({ track: track, trackLatLong: latLong, timePositionMarker: timePositionMarker, trackRecordTime: recordTime })
     },
 
     zoomToTrack: function() {
@@ -268,14 +297,33 @@ function createMapControl(elementName) {
         icon: pinIcon
       }).addTo(map);
     },
+    
+    setTimeMarker: function(time) {
+      var i;
+      var j;
 
-    setTimeMarker: function(timeIndex) {
-      var markerLatLng = trackLatLong[timeIndex];
-      if (markerLatLng) {
-        timePositionMarker.setLatLng(markerLatLng);
-
-        if (!map.getBounds().contains(markerLatLng)) {
-          map.panTo(markerLatLng);
+      for (i = 0; i < data.length; i++) {
+        var foundTime = 0;
+        var foundIndex = 0;
+        var trackLatLong = data[i].trackLatLong;
+        var trackRecordTime = data[i].trackRecordTime;
+        
+        for (j = 0; j < trackRecordTime.length; j++) {
+          if (trackRecordTime[j] < time && trackRecordTime[j] > foundTime) {
+            foundTime = trackRecordTime[j];
+            foundIndex = j;
+          } else {
+            // Check next to find closest time...
+            if (time - foundTime > trackRecordTime[j] - time) {
+              foundTime = trackRecordTime[j];
+              foundIndex = j;
+            }
+            break;
+          }
+        }
+        var markerLatLng = trackLatLong[foundIndex];
+        if (markerLatLng) {
+          data[i].timePositionMarker.setLatLng(markerLatLng);
         }
       }
     }
