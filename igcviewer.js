@@ -778,10 +778,16 @@ var ns = (function($) {
     $('#clearTask').show();
   }
   
-  function displayTask(igcFile, mapControl) {
+  function displayTask(igcFiles, mapControl) {
     if ($("input[name=tasksource][value=infile]").prop('checked')) {
       clearTask(mapControl);
-      task = getFileTask(igcFile);
+      var i;
+      for (i = 0; i < igcFiles.length; i++) {
+        task = getFileTask(igcFiles[i]);
+        if (task != null) {
+          break;
+        }
+      }
     }
 
     if (task !== null) {
@@ -875,9 +881,7 @@ var ns = (function($) {
             displayIgc(newIgcFile, mapControl);
             igcFiles.push(newIgcFile);
             iFile++;
-            if (task == null) {
-              displayTask(newIgcFile, mapControl);
-            }
+
             if (files.length > iFile) {
               reader.readAsText(files[iFile]);
             } else {
@@ -887,6 +891,7 @@ var ns = (function($) {
               }
               barogramPlot = plotBarogram(igcFiles);
               setTimeSlider(igcFiles);
+              displayTask(igcFiles, mapControl);
             }
           } catch (ex) {
             if (ex instanceof IGCException) {
@@ -976,7 +981,7 @@ var ns = (function($) {
     $('#barogram').on('plotclick', function(event, pos, item) {
       if (item) {
         updateTimeline(item.datapoint[0] - timezone.offset, mapControl);
-        $('#timeSlider').val(item.datapoint[0]);
+        $('#timeSlider').val(item.datapoint[0] - timezone.offset);
       }
     });
 
